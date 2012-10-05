@@ -44,6 +44,15 @@
 
 @dynamic requestOperation;
 
+- (id)initWithRequest:(NSURLRequest *)request responseDescriptors:(NSArray *)responseDescriptors
+{
+    self = [super initWithRequest:request responseDescriptors:responseDescriptors];
+    if (self) {
+        self.savesToPersistentStore = YES;
+    }
+    return self;
+}
+
 - (void)setTargetObject:(id)targetObject
 {
     [super setTargetObject:targetObject];
@@ -134,6 +143,7 @@
                 RKLogWarning(@"Unable to delete object sent with `DELETE` request: Failed to retrieve object with objectID %@", self.targetObjectID);
                 RKLogCoreDataError(_blockError);
                 _blockSuccess = NO;
+                *error = _blockError;
             }
         }];
     }
@@ -156,6 +166,11 @@
             [self.privateContext performBlockAndWait:^{
                 _blockObjects = [self.privateContext executeFetchRequest:fetchRequest error:&_blockError];
             }];
+
+            if (_blockObjects == nil) {
+                if (error) *error = _blockError;
+                return nil;
+            }
             RKLogTrace(@"Fetched local objects matching URL '%@' with fetch request '%@': %@", URL, fetchRequest, _blockObjects);
             [localObjects addObjectsFromArray:_blockObjects];
         } else {
@@ -195,12 +210,20 @@
 
 - (BOOL)saveContext:(NSError **)error
 {
-    BOOL success = YES;
+    __block BOOL success = YES;
+    __block NSError *localError = nil;
     if ([self.privateContext hasChanges]) {
-        success = [self.privateContext saveToPersistentStore:error];
+        if (self.savesToPersistentStore) {
+            success = [self.privateContext saveToPersistentStore:&localError];
+        } else {
+            [self.privateContext performBlockAndWait:^{
+                success = [self.privateContext save:&localError];
+            }];
+        }
         if (! success) {
-            RKLogError(@"Failed saving managed object context %@ to persistent store: ", self.privateContext);
-            RKLogCoreDataError(*error);
+            if (error) *error = localError;
+            RKLogError(@"Failed saving managed object context %@ %@", (self.savesToPersistentStore ? @"to the persistent store" : @""),  self.privateContext);
+            RKLogCoreDataError(localError);
         }
     }
 
@@ -210,12 +233,14 @@
 - (BOOL)obtainPermanentObjectIDsForInsertedObjects:(NSError **)error
 {
     __block BOOL _blockSuccess = YES;
+    __block NSError *localError = nil;
     NSArray *insertedObjects = [self.privateContext.insertedObjects allObjects];
     if ([insertedObjects count] > 0) {
         RKLogDebug(@"Obtaining permanent ID's for %ld managed objects", (unsigned long) [insertedObjects count]);
         [self.privateContext performBlockAndWait:^{
-            _blockSuccess = [self.privateContext obtainPermanentIDsForObjects:insertedObjects error:error];
+            _blockSuccess = [self.privateContext obtainPermanentIDsForObjects:insertedObjects error:&localError];
         }];
+        if (!_blockSuccess && error) *error = localError;
     }
 
     return _blockSuccess;;

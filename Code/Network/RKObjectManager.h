@@ -105,7 +105,7 @@ RKMappingResult, RKRequestDescriptor, RKResponseDescriptor;
  
  There are three types of routes currently supported:
  
- 1. Class Routes. Class routes are configured to target a given object class and HTTP request method. For example, we mightone might route the HTTP `GET` for a `User` class to the path pattern `@"/users/:userID"`.
+ 1. Class Routes. Class routes are configured to target a given object class and HTTP request method. For example, we might route the HTTP `GET` for a `User` class to the path pattern `@"/users/:userID"`.
  1. Relationship Routes. Relationship routes identify the path appropriate for performing a request for an object that is related to another object. For example, each `User` may have many friends. This might be routed as a relationship route for the `User` class with the name `@"friends"` to the path pattern `@"/users/:userID/friends"`.
  1. Named Routes. Names routes bind an arbitrary name to a path. For example, there might be an action to follow another user that could be added as a named route with the name `@"follow_user"` that generates a `POST` to the path pattern `@"/users/:userID/follow"`.
  
@@ -203,6 +203,11 @@ RKMappingResult, RKRequestDescriptor, RKResponseDescriptor;
 @property (nonatomic, strong, readonly) AFHTTPClient *HTTPClient;
 
 /**
+ The base URL of the underlying HTTP client.
+ */
+@property (nonatomic, readonly) NSURL *baseURL;
+
+/**
  The operation queue which manages operations enqueued by the object manager.
  */
 @property (nonatomic, strong) NSOperationQueue *operationQueue;
@@ -246,7 +251,7 @@ RKMappingResult, RKRequestDescriptor, RKResponseDescriptor;
 /**
  Creates and returns an `NSMutableURLRequest` object with a given object, method, path, and parameters.
  
- The manager is searched for an `RKRequestDescriptor` object with an objectClass that matches the class of the given object. If found, the matching request descriptor and object are used to build a parameterization of the object's attributes using the `RKObjectParameterization` class if the request method is a `POST`, `PUT`, or `PATCH`. The parameterized representation of the object is reverse merged with the given parameters dictionary, if any, and then serialized and set as the request body. If the HTTP method is `GET`, the parameters will be used to construct a url-encoded query string that is appended to the request's URL.
+ The manager is searched for an `RKRequestDescriptor` object with an objectClass that matches the class of the given object. If found, the matching request descriptor and object are used to build a parameterization of the object's attributes using the `RKObjectParameterization` class if the request method is a `POST`, `PUT`, or `PATCH`. The parameterized representation of the object is reverse merged with the given parameters dictionary, if any, and then serialized and set as the request body. If the HTTP method is `GET` or `DELETE`, the object will not be parameterized and the given parameters, if any, will be used to construct a url-encoded query string that is appended to the request's URL.
  
  If the given path is nil, the router is searched for a class route with the class of the object andthe method. The path pattern of the retrieved route is interpolated with the object and the resulting path is appended to the HTTP client's base URL and used as the request URL.
  
@@ -650,6 +655,8 @@ RKMappingResult, RKRequestDescriptor, RKResponseDescriptor;
 /**
  Adds a response descriptor to the manager.
  
+ Adding a response descriptor to the manager sets the `baseURL` of the descriptor to the `baseURL` of the manager, causing it to evaluate URL objects relatively.
+
  @param responseDescriptor The response descriptor object to the be added to the manager.
  */
 - (void)addResponseDescriptor:(RKResponseDescriptor *)responseDescriptor;

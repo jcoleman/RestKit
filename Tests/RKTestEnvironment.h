@@ -22,8 +22,11 @@
 #import <OCMock/NSNotificationCenter+OCMAdditions.h>
 
 #define HC_SHORTHAND
-#import <OCHamcrestIOS/OCHamcrestIOS.h>
+#import "OCHamcrest.h"
 #import <SenTestingKit/SenTestingKit.h>
+
+#define EXP_SHORTHAND
+#import "Expecta.h"
 
 #import "RestKit.h"
 #import <RestKit/Testing.h>

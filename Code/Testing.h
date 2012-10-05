@@ -8,6 +8,6 @@
 
 #import "RKTestFixture.h"
 #import "RKTestNotificationObserver.h"
-#import "RKTestResponseLoader.h"
 #import "RKTestFactory.h"
+#import "RKTestHelpers.h"
 #import "RKMappingTest.h"

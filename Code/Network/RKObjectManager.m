@@ -44,25 +44,6 @@ static RKObjectManager  *sharedManager = nil;
 // Utility Functions
 
 /**
- Returns the base URL associated with a given URL object.
- 
- This associated object reference is used to maintain an association between the URL property of an `NSURLRequest` object and the baseURL of the object manager which created it. This is necessary because `NSURLRequest` changes the URL it is initialized with and the `baseURL` property is set to nil. The object manager sets the association after initializing an `NSURLRequest` object. The associated reference is then used in `RKResponseMapperOperation` when matching `RKResponseDescriptor` objects to the response URL path.
- 
- @param baseURL The base URL to associate with another URL.
- @param URL The URL to associate `baseURL` with.
- @see `requestWithMethod:path:parameters:`
- */
-void RKAssociateBaseURLWithURL(NSURL *baseURL, NSURL *URL);
-
-/**
- Returns the base URL associated with a given URL object.
- 
- @param URL The URL to retrieve the associated base URL object.
- @return An `NSURL` object that is the base URL of the given URL.
- */
-NSURL *RKBaseURLAssociatedWithURL(NSURL *URL);
-
-/**
  Returns the subset of the given array of `RKResponseDescriptor` objects that match the given path.
  
  @param responseDescriptors An array of `RKResponseDescriptor` objects.
@@ -168,6 +149,11 @@ static BOOL RKDoesArrayOfResponseDescriptorsContainEntityMapping(NSArray *respon
     self.acceptHeaderValue = MIMEType;
 }
 
+- (NSURL *)baseURL
+{
+    return self.HTTPClient.baseURL;
+}
+
 /////////////////////////////////////////////////////////////
 #pragma mark - Object Collection Loaders
 
@@ -202,11 +188,6 @@ static BOOL RKDoesArrayOfResponseDescriptorsContainEntityMapping(NSArray *respon
         request = [self.HTTPClient requestWithMethod:method path:path parameters:parameters];
     }
 
-    /**
-     Associate our baseURL with the URL of the `NSURLRequest` object. This enables us to match response descriptors by path.
-     */
-    RKAssociateBaseURLWithURL(self.HTTPClient.baseURL, request.URL);
-
 	return request;
 }
 - (NSMutableURLRequest *)requestWithPathForRouteNamed:(NSString *)routeName
@@ -238,7 +219,7 @@ static BOOL RKDoesArrayOfResponseDescriptorsContainEntityMapping(NSArray *respon
     NSString *stringMethod = RKStringFromRequestMethod(method);
     NSDictionary *requestParameters = nil;
     RKRequestDescriptor *requestDescriptor = RKRequestDescriptorFromArrayMatchingObject(self.requestDescriptors, object);
-    if (requestDescriptor) {
+    if ((method != RKRequestMethodGET && method != RKRequestMethodDELETE) && requestDescriptor) {
         NSError *error = nil;
         requestParameters = [[RKObjectParameterization parametersWithObject:object requestDescriptor:requestDescriptor error:&error] mutableCopy];
         if (parameters) {
@@ -462,6 +443,7 @@ static BOOL RKDoesArrayOfResponseDescriptorsContainEntityMapping(NSArray *respon
 {
     NSParameterAssert(responseDescriptor);
     NSAssert([responseDescriptor isKindOfClass:[RKResponseDescriptor class]], @"Expected an object of type RKResponseDescriptor, got '%@'", [responseDescriptor class]);
+    responseDescriptor.baseURL = self.baseURL;
     [self.mutableResponseDescriptors addObject:responseDescriptor];
 }
 

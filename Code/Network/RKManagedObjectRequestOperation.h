@@ -27,8 +27,6 @@
 
  The `RKManagedObjectRequestOperation` class extends the basic behavior of an `RKObjectRequestOperation` to meet the constraints imposed by Core Data. In particular, managed object request operations observe the threading requirements by making use of `NSManagedObjectContext` concurrency types, leverage the support for parent/child contexts, and handle obtaining a permanent `NSManagedObjectID` for objects being mapped so that they are addressable across contexts. Object mapping is internally performed within a block provided to the target context via `performBlockAndWait:`, ensuring execution on the appropriate queue.
 
- @warning `RKManagedObjectRequestOperation` **does NOT** support object mapping that targets an `NSManagedObjectContext` with a `concurrencyType` of `NSConfinementConcurrencyType`.
-
  Aside from providing the basic infrastructure for successful object mapping into Core Data, a number of additional Core Data specific features are provided by the `RKManagedObjectRequestOperation` class that warrant discussion in detail.
 
  ## Parent Context
@@ -66,7 +64,7 @@
 
     RKObjectManager *manager = [RKObjectManager managerWithBaseURL:@"http://restkit.org"];
     [manager addFetchRequestBlock:^NSFetchRequest *(NSURL *URL) {
-        RKPathMatcher *pathMatcher = [RKPathMatcher matcherWithPattern:@"/airports/:airport_id/terminals.json"];
+        RKPathMatcher *pathMatcher = [RKPathMatcher pathMatcherWithPattern:@"/airports/:airport_id/terminals.json"];
 
         NSDictionary *argsDict = nil;
         BOOL match = [pathMatcher matchesPath:[URL relativePath] tokenizeQueryStrings:NO parsedArguments:&argsDict];
@@ -95,7 +93,11 @@
 
  ## Managed Object Context Save Behaviors
 
- TBD
+ The results of the operation can either be 'pushed' to the parent context or saved to the persistent store. Configuration is available via the `savesToPersistentStore` property. If an error is encountered while saving the managed object context, then the operation is considered to have failed and the `error` property will be set to the `NSError` object returned by the failed save.
+
+ ## Limitations and Caveats
+
+ @warning `RKManagedObjectRequestOperation` **does NOT** support object mapping that targets an `NSManagedObjectContext` with a `concurrencyType` of `NSConfinementConcurrencyType`.
 
  @see `RKObjectRequestOperation`
  @see `RKEntityMapping`
@@ -137,17 +139,22 @@
 ///------------------------------------
 
 /**
- A Boolean value that determines if the receiver will delete orphaned objects upon
- completion of the operation.
+ A Boolean value that determines if the receiver will delete orphaned objects upon completion of the operation.
 
  Please see the above discussion of 'Deleting Managed Objects for `DELETE` requests' for more details.
 
- **Default**: NO
+ **Default**: `NO`
  */
 @property (nonatomic, assign) BOOL deletesOrphanedObjects;
 
-// TODO: May want BOOL autosavesContext | autosavesToPersistentStore
-// TODO: May want BOOL cleanupOrphanedObject option
+/**
+ A Boolean value that determines if the operation saves the mapping results to the persistent store upon successful completion. If the network transport or mapping portions of the operation fail the operation then this option has no effect.
+ 
+ When `YES`, the receiver will invoke `saveToPersistentStore:` on its private managed object context to persist the mapping results all the way back to the persistent store coordinator. If `NO`, the private mapping context will be saved causing the mapped objects to be 'pushed' to the parent context as represented by the `managedObjectContext` property.
+ 
+ **Default**: `YES`
+ */
+@property (nonatomic, assign) BOOL savesToPersistentStore;
 
 @end
 

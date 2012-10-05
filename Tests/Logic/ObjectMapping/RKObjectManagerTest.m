@@ -26,14 +26,12 @@
 #import "RKCat.h"
 #import "RKObjectMapperTestModel.h"
 
-void RKAssociateBaseURLWithURL(NSURL *baseURL, NSURL *URL);
-NSURL *RKBaseURLAssociatedWithURL(NSURL *URL);
-
 @interface RKObjectManagerTest : RKTestCase
 
 @property (nonatomic, strong) RKObjectManager *objectManager;
 @property (nonatomic, strong) RKRoute *humanGETRoute;
 @property (nonatomic, strong) RKRoute *humanPOSTRoute;
+@property (nonatomic, strong) RKRoute *humanDELETERoute;
 @property (nonatomic, strong) RKRoute *humanCatsRoute;
 @property (nonatomic, strong) RKRoute *humansCollectionRoute;
 
@@ -84,11 +82,13 @@ NSURL *RKBaseURLAssociatedWithURL(NSURL *URL);
 
     self.humanPOSTRoute = [RKRoute routeWithClass:[RKHuman class] pathPattern:@"/humans" method:RKRequestMethodPOST];
     self.humanGETRoute = [RKRoute routeWithClass:[RKHuman class] pathPattern:@"/humans/:railsID" method:RKRequestMethodGET];
+    self.humanDELETERoute = [RKRoute routeWithClass:[RKHuman class] pathPattern:@"/humans/:railsID" method:RKRequestMethodDELETE];
     self.humanCatsRoute = [RKRoute routeWithRelationshipName:@"cats" objectClass:[RKHuman class] pathPattern:@"/humans/:railsID/cats" method:RKRequestMethodGET];
     self.humansCollectionRoute = [RKRoute routeWithName:@"humans" pathPattern:@"/humans" method:RKRequestMethodGET];
 
     [self.objectManager.router.routeSet addRoute:self.humanPOSTRoute];
     [self.objectManager.router.routeSet addRoute:self.humanGETRoute];
+    [self.objectManager.router.routeSet addRoute:self.humanDELETERoute];
     [self.objectManager.router.routeSet addRoute:self.humanCatsRoute];
     [self.objectManager.router.routeSet addRoute:self.humansCollectionRoute];
 }
@@ -143,6 +143,50 @@ NSURL *RKBaseURLAssociatedWithURL(NSURL *URL);
     [operation waitUntilFinished];
     
     assertThat(temporaryHuman.managedObjectContext, is(equalTo(_objectManager.managedObjectStore.persistentStoreManagedObjectContext)));
+}
+
+- (void)testShouldDeleteACoreDataBackedTargetObjectOnSuccessfulDeleteReturning200
+{
+    RKHuman *temporaryHuman = [[RKHuman alloc] initWithEntity:[NSEntityDescription entityForName:@"RKHuman" inManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext] insertIntoManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext];
+    temporaryHuman.name = @"My Name";
+    temporaryHuman.railsID = @1;
+    RKObjectMapping *mapping = [RKObjectMapping mappingForClass:[NSMutableDictionary class]];
+    [mapping addAttributeMappingsFromArray:@[@"name"]];
+
+    // Save it to ensure the object is persisted before we delete it
+    [self.objectManager.managedObjectStore.persistentStoreManagedObjectContext save:nil];
+
+    RKManagedObjectRequestOperation *operation = [self.objectManager appropriateObjectRequestOperationWithObject:temporaryHuman method:RKRequestMethodDELETE path:nil parameters:nil];
+    [operation start];
+    [operation waitUntilFinished];
+
+    NSError *error = nil;
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"RKHuman"];
+    NSArray *humans = [_objectManager.managedObjectStore.persistentStoreManagedObjectContext executeFetchRequest:fetchRequest error:&error];
+    assertThat(error, is(nilValue()));
+    assertThatInteger(humans.count, is(equalToInteger(0)));
+}
+
+- (void)testShouldDeleteACoreDataBackedTargetObjectOnSuccessfulDeleteReturning204
+{
+    RKHuman *temporaryHuman = [[RKHuman alloc] initWithEntity:[NSEntityDescription entityForName:@"RKHuman" inManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext] insertIntoManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext];
+    temporaryHuman.name = @"My Name";
+    temporaryHuman.railsID = @204;
+    RKObjectMapping *mapping = [RKObjectMapping mappingForClass:[NSMutableDictionary class]];
+    [mapping addAttributeMappingsFromArray:@[@"name"]];
+
+    // Save it to ensure the object is persisted before we delete it
+    [self.objectManager.managedObjectStore.persistentStoreManagedObjectContext save:nil];
+
+    RKManagedObjectRequestOperation *operation = [self.objectManager appropriateObjectRequestOperationWithObject:temporaryHuman method:RKRequestMethodDELETE path:nil parameters:nil];
+    [operation start];
+    [operation waitUntilFinished];
+
+    NSError *error = nil;
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"RKHuman"];
+    NSArray *humans = [_objectManager.managedObjectStore.persistentStoreManagedObjectContext executeFetchRequest:fetchRequest error:&error];
+    assertThat(error, is(nilValue()));
+    assertThatInteger(humans.count, is(equalToInteger(0)));
 }
 
 - (void)testCancellationByExactMethodAndPath
@@ -233,6 +277,24 @@ NSURL *RKBaseURLAssociatedWithURL(NSURL *URL);
 
     assertThatInteger(progressCallbackCount, is(equalToInteger(3)));
     assertThatInteger(completionBlockOperationCount, is(equalToInteger(3)));
+}
+
+- (void)testThatObjectParametersAreNotSentDuringGetObject
+{
+    RKHuman *temporaryHuman = [[RKHuman alloc] initWithEntity:[NSEntityDescription entityForName:@"RKHuman" inManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext] insertIntoManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext];
+    temporaryHuman.name = @"My Name";
+    temporaryHuman.railsID = @204;
+    RKManagedObjectRequestOperation *operation = [_objectManager appropriateObjectRequestOperationWithObject:temporaryHuman method:RKRequestMethodGET path:nil parameters:@{@"this": @"that"}];
+    expect([operation.request.URL absoluteString]).to.equal(@"http://127.0.0.1:4567/humans/204?this=that");
+}
+
+- (void)testThatObjectParametersAreNotSentDuringDeleteObject
+{
+    RKHuman *temporaryHuman = [[RKHuman alloc] initWithEntity:[NSEntityDescription entityForName:@"RKHuman" inManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext] insertIntoManagedObjectContext:_objectManager.managedObjectStore.persistentStoreManagedObjectContext];
+    temporaryHuman.name = @"My Name";
+    temporaryHuman.railsID = @204;
+    RKManagedObjectRequestOperation *operation = [_objectManager appropriateObjectRequestOperationWithObject:temporaryHuman method:RKRequestMethodDELETE path:nil parameters:@{@"this": @"that"}];
+    expect([operation.request.URL absoluteString]).to.equal(@"http://127.0.0.1:4567/humans/204?this=that");
 }
 
 // TODO: Move to Core Data specific spec file...
@@ -506,49 +568,5 @@ NSURL *RKBaseURLAssociatedWithURL(NSURL *URL);
 //    manager.client = client;
 //    assertThatInteger(manager.networkStatus, is(equalToInteger(RKObjectManagerNetworkStatusUnknown)));
 //}
-
-- (void)testAssociationAndExtractionOfBaseURL
-{
-    NSURL *baseURL = [NSURL URLWithString:@"http://domain.com/api/v1/"];
-    NSURL *relativeURL = [NSURL URLWithString:@"itemtype" relativeToURL:baseURL];
-    assertThat([relativeURL relativePath], is(equalTo(@"itemtype")));
-    NSURLRequest *request = [NSURLRequest requestWithURL:relativeURL];
-    RKAssociateBaseURLWithURL(baseURL, request.URL);
-    
-    NSURL *associatedBaseURL = RKBaseURLAssociatedWithURL(request.URL);
-    assertThat(associatedBaseURL, is(notNilValue()));
-    NSString *relativePathFromAssociation = [[request.URL absoluteString] substringFromIndex:[[associatedBaseURL absoluteString] length]];
-    assertThat(relativePathFromAssociation, is(equalTo(@"itemtype")));
-}
-
-- (void)testBaseURLandRelativePathRoundTripping
-{
-    NSURL *baseURL = [NSURL URLWithString:@"http://domain.com/api/v1/"];
-    NSURL *relativeURL = [NSURL URLWithString:@"itemtype" relativeToURL:baseURL];
-    assertThat([relativeURL baseURL], is(equalTo(baseURL)));
-    assertThat([relativeURL relativePath], is(equalTo(@"itemtype")));
-    assertThat([relativeURL relativeString], is(equalTo(@"itemtype")));
-    
-    // NSURLRequest clobbers the URL
-    NSURLRequest *request = [NSURLRequest requestWithURL:relativeURL];
-    assertThat([request.URL baseURL], isNot(equalTo(baseURL)));
-    assertThat([request.URL relativePath], isNot(equalTo(@"itemtype")));
-    assertThat([request.URL relativeString], isNot(equalTo(@"itemtype")));
-    
-    // Verify use of associated object support to workaround URL issues. We associate with the request URL after init, which is retained by the NSHTTPURLResponse
-    RKAssociateBaseURLWithURL(baseURL, request.URL);
-    NSHTTPURLResponse *response = [[NSHTTPURLResponse alloc] initWithURL:request.URL statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:nil];
-    assertThat([response.URL baseURL], is(equalTo(nil)));
-    NSURL *associatedBaseURL = RKBaseURLAssociatedWithURL(response.URL);
-    assertThat(associatedBaseURL, is(equalTo(baseURL)));
-    
-    // These are wrong -- we want the relative 'itemtype' path
-    assertThat([response.URL relativePath], is(equalTo(@"/api/v1/itemtype")));
-    assertThat([response.URL relativeString], is(equalTo(@"http://domain.com/api/v1/itemtype")));
-    
-    // Build our own relative path and verify it works
-    NSString *relativePathFromAssociation = [[request.URL absoluteString] substringFromIndex:[[associatedBaseURL absoluteString] length]];
-    assertThat(relativePathFromAssociation, is(equalTo(@"itemtype")));
-}
 
 @end
