@@ -241,7 +241,7 @@ static id RKRefetchedValueInManagedObjectContext(id value, NSManagedObjectContex
     if (! [self.mappingResult count]) return self.mappingResult;
     
     NSMutableDictionary *newDictionary = [self.mappingResult.dictionary mutableCopy];
-    [self.managedObjectContext performBlockAndWait:^{
+    void (^refetchingBlock)() = ^{
         NSArray *entityMappingEvents = [RKEntityMappingEvent entityMappingEventsForMappingInfo:self.mappingInfo];
         NSSet *rootKeys = [NSSet setWithArray:[entityMappingEvents valueForKey:@"rootKey"]];
         for (id rootKey in rootKeys) {
@@ -278,7 +278,13 @@ static id RKRefetchedValueInManagedObjectContext(id value, NSManagedObjectContex
                 }
             }
         }
-    }];
+    };
+
+    if ([NSThread isMainThread]) {
+        refetchingBlock();
+    } else {
+        [self.managedObjectContext performBlockAndWait:refetchingBlock];
+    }
     
     return [[RKMappingResult alloc] initWithDictionary:newDictionary];
 }
